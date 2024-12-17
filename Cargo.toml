@@ -2,6 +2,12 @@
 name = "askpass-1p"
 version = "0.1.0"
 edition = "2021"
+authors = ["Lina Edwards <bright.art1794@fastmail.com>"]
+description = "An askpass utility that integrates with 1Password CLI"
+license = "GPL-3.0-only"
+repository = "https://github.com/butterflysky/askpass-1p"
+keywords = ["askpass", "1password", "cli", "authentication"]
+categories = ["command-line-utilities", "authentication"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
