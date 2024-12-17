@@ -1,6 +1,6 @@
 [package]
 name = "askpass-1p"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Lina Edwards <bright.art1794@fastmail.com>"]
 description = "An askpass utility that integrates with 1Password CLI"
