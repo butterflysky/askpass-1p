@@ -9,7 +9,7 @@ askpass-1p is a utility for Linux environments that works as an askpass program.
 
 # Installation
 
-cargo install askpass-1p
+```cargo install askpass-1p```
 
 This will install the askpass-1p binary to ~/.cargo/bin.
 
@@ -25,17 +25,19 @@ Set the SSH_ASKPASS environment variable to point to the askpass-1p binary:
 
 Use the tool when prompted for credentials, for example via ```ssh-add```, or my original use-case, pushing to a github repository and needing to look up a personal access token.
 
-Follow the prompts:
-    Select a 1Password item from the list.
-    Select the desired field (e.g., username, password).
+Follow the prompts.
+
+*    Select a 1Password item from the list.
+*    Select the desired field (e.g., username, password).
 
 The selected field's value will be supplied to the requesting program.
 
 ### Example Workflow
 
-    User runs ssh-add or any tool requiring credentials.
+User runs ssh-add or any tool requiring credentials.
 
-    The tool prompts the user to select a 1Password item:
+The tool prompts the user to select a 1Password item:
+
 ```
     Select a 1Password Item
     > My SSH Key
@@ -67,6 +69,5 @@ Contributions are welcome! To report issues or suggest features, please open an 
 
 ## Acknowledgments
 
-    1Password CLI
-    inquire crate
-    Rust Community for making such awesome tools.
+* Mikael Mello's awesome inquire crate: https://github.com/mikaelmello/inquire
+* 1Password CLI
