@@ -1,84 +1,154 @@
-use std::env;
-use std::io::{Write};
-use std::process::{Command, Stdio};
+use inquire::Select;
 use serde::Deserialize;
+use std::env;
+use std::process::{exit, Command}; 
 
-#[derive(Deserialize)]
-struct Item {
-    id: String,
+#[derive(Debug, Deserialize)]
+struct OpItem {
     title: String,
+    id: String,
 }
 
 fn main() {
-    let prompt = env::args().nth(1).unwrap_or_default();
-
-    // Fetch list of Login items from 1Password
-    let op_list = Command::new("op")
-        .args(&["item", "list", "--categories", "Login", "--format", "json"])
-        .output()
-        .expect("Failed to run op item list");
-    if !op_list.status.success() {
-        eprintln!("op item list failed, ensure you're signed in");
-        std::process::exit(1);
+    // Check argument count early and exit if invalid
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        eprintln!("Usage: {} <prompt>", args[0]);
+        exit(1);
     }
+    let prompt = &args[1];
 
-    let items_json = String::from_utf8_lossy(&op_list.stdout);
-    let items: Vec<Item> = serde_json::from_str(&items_json).expect("Failed to parse JSON from op");
+    let selected_item_id = fetch_op_item(&prompt);
+    let field_value = fetch_selected_field_value(&selected_item_id);
 
-    // Prepare just the titles for rofi
-    let titles: Vec<&str> = items.iter().map(|item| item.title.as_str()).collect();
-
-    // Run rofi with titles on stdin, returning an index
-    let mut rofi_child = Command::new("rofi")
-        .args(&["-dmenu", "-i", "-p", &prompt, "-format", "i"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("Failed to spawn rofi");
-
-    {
-        let rofi_stdin = rofi_child.stdin.as_mut().expect("Failed to open rofi stdin");
-        for title in &titles {
-            writeln!(rofi_stdin, "{}", title).expect("Failed writing to rofi stdin");
-        }
-    }
-
-    let rofi_output = rofi_child.wait_with_output().expect("Failed to read rofi output");
-    if !rofi_output.status.success() {
-        // User likely cancelled selection
-        std::process::exit(1);
-    }
-
-    let selected_index_str = String::from_utf8_lossy(&rofi_output.stdout).trim().to_string();
-    if selected_index_str.is_empty() {
-        // User cancelled
-        std::process::exit(1);
-    }
-
-    let selected_index: usize = selected_index_str.parse().expect("Invalid index from rofi");
-    if selected_index >= items.len() {
-        eprintln!("Selected index out of range");
-        std::process::exit(1);
-    }
-
-    let selected_id = &items[selected_index].id;
-
-    // Determine which field to get based on prompt
-    let field = if prompt.to_lowercase().contains("username") {
-        "username"
-    } else {
-        "password"
-    };
-
-    let op_get = Command::new("op")
-        .args(&["item", "get", selected_id, "--fields", field, "--reveal"])
-        .output()
-        .expect("Failed to run op item get");
-    if !op_get.status.success() {
-        eprintln!("Failed to retrieve {} from op item get", field);
-        std::process::exit(1);
-    }
-
-    let field_value = String::from_utf8_lossy(&op_get.stdout).trim().to_string();
+    // Step 3: Output the field value (e.g., username, password)
     println!("{}", field_value);
+}
+
+fn fetch_op_item(prompt: &str) -> String {
+    let items = list_op_items();
+    if items.is_empty() {
+        eprintln!("No items found in 1Password.");
+        exit(1);
+    }
+
+    let titles: Vec<String> = items.iter().map(|item| item.title.clone()).collect();
+
+    // Use inquire::Select to display a selectable list
+    let selected_title = Select::new(&prompt, titles.clone())
+        .prompt()
+        .expect("Failed to display selection prompt.");
+
+    // Match the selected title back to its corresponding ID
+    items
+        .into_iter()
+        .find(|item| item.title == selected_title)
+        .map(|item| item.id)
+        .unwrap_or_else(|| {
+            eprintln!("Failed to map selection back to item ID.");
+            exit(1);
+        })
+}
+
+/// Fetch the list of fields for a 1Password item
+fn fetch_fields_for_item(op_item_id: &str) -> Vec<String> {
+    let output = Command::new("op")
+        .arg("item")
+        .arg("get")
+        .arg(op_item_id)
+        .arg("--format=json")
+        .output()
+        .unwrap_or_else(|_| {
+            eprintln!("Failed to fetch 1Password item fields.");
+            exit(1);
+        });
+
+    if !output.status.success() {
+        eprintln!(
+            "Error: Failed to get item fields: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        exit(1);
+    }
+
+    let json_output = String::from_utf8(output.stdout).expect("Invalid UTF-8 in 1Password output.");
+
+    // Parse fields from the JSON response
+    let parsed: serde_json::Value = serde_json::from_str(&json_output).expect("Invalid JSON output.");
+    let fields = parsed["fields"]
+        .as_array()
+        .unwrap_or(&vec![])
+        .iter()
+        .filter_map(|field| field["label"].as_str().map(|s| s.to_string()))
+        .collect();
+
+    fields
+}
+
+/// Allow the user to select a field from the 1Password entry
+fn fetch_selected_field_value(op_item_id: &str) -> String {
+    let fields = fetch_fields_for_item(op_item_id);
+
+    if fields.is_empty() {
+        eprintln!("No fields available for the selected item.");
+        exit(1);
+    }
+
+    let selected_field = Select::new("Select a field to fetch", fields)
+        .prompt()
+        .expect("Failed to display field selection prompt.");
+
+    // Fetch the value for the selected field
+    let output = Command::new("op")
+        .arg("item")
+        .arg("get")
+        .arg(op_item_id)
+        .arg("--field")
+        .arg(selected_field)
+        .arg("--reveal")
+        .output()
+        .unwrap_or_else(|_| {
+            eprintln!("Failed to fetch the selected field value.");
+            exit(1);
+        });
+
+    if !output.status.success() {
+        eprintln!(
+            "Error: Failed to fetch field value: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        exit(1);
+    }
+
+    String::from_utf8(output.stdout)
+        .expect("Invalid UTF-8 in field value.")
+        .trim()
+        .to_string()
+}
+
+/// Fetch the list of 1Password items
+fn list_op_items() -> Vec<OpItem> {
+    let output = Command::new("op")
+        .arg("item")
+        .arg("list")
+        .arg("--format=json")
+        .output()
+        .unwrap_or_else(|_| {
+            eprintln!(
+                "Failed to list 1Password items. Ensure 'op' CLI is installed and authenticated."
+            );
+            exit(1);
+        });
+
+    if output.status.success() {
+        let items_json =
+            String::from_utf8(output.stdout).expect("Invalid UTF-8 in 1Password output.");
+        serde_json::from_str(&items_json).expect("Failed to parse 1Password items JSON.")
+    } else {
+        eprintln!(
+            "Error: Failed to fetch 1Password items: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        exit(1);
+    }
 }
