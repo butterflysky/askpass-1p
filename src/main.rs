@@ -10,8 +10,8 @@ struct OpItem {
 }
 
 fn main() {
-    // Check argument count early and exit if invalid
     let args: Vec<String> = env::args().collect();
+
     if args.len() < 2 {
         eprintln!("Usage: {} <prompt>", args[0]);
         exit(1);
@@ -21,7 +21,6 @@ fn main() {
     let selected_item_id = fetch_op_item(&prompt);
     let field_value = fetch_selected_field_value(&selected_item_id);
 
-    // Step 3: Output the field value (e.g., username, password)
     println!("{}", field_value);
 }
 
@@ -85,7 +84,6 @@ fn fetch_fields_for_item(op_item_id: &str) -> Vec<String> {
     fields
 }
 
-/// Allow the user to select a field from the 1Password entry
 fn fetch_selected_field_value(op_item_id: &str) -> String {
     let fields = fetch_fields_for_item(op_item_id);
 
@@ -98,7 +96,6 @@ fn fetch_selected_field_value(op_item_id: &str) -> String {
         .prompt()
         .expect("Failed to display field selection prompt.");
 
-    // Fetch the value for the selected field
     let output = Command::new("op")
         .arg("item")
         .arg("get")
@@ -126,7 +123,6 @@ fn fetch_selected_field_value(op_item_id: &str) -> String {
         .to_string()
 }
 
-/// Fetch the list of 1Password items
 fn list_op_items() -> Vec<OpItem> {
     let output = Command::new("op")
         .arg("item")
